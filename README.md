@@ -1,7 +1,33 @@
-# Laser Weeding — Targeting Pipeline Architecture
+# Kyron — Laser Weeding Targeting Pipeline
 
-Real-time perception-to-actuation pipeline for a galvo-steered laser weeder. The
-core design principle: **the system only ever measures deltas between two
+Real-time perception-to-actuation pipeline for a galvo-steered laser weeder. A
+YOLOv8-Pose detector finds each weed's growth point; a 100 Hz visual-odometry loop
+and a 1 kHz gyro keep the laser on that point while the robot keeps moving.
+
+| Result | Value |
+|---|---|
+| Stem localization (YOLOv8-Pose) | **1.0 mm** median error |
+| Model choice | YOLO nano: ~50% lower inference latency than larger variants, 0.93 recall held |
+| Robot ground speed tracked | 0.3 m/s |
+| Deployment | 11 farms, 200+ acres, $20k+ revenue; CMU SURA-funded |
+
+*Role: software lead (Feb–Jun 2026). The production code is private to the Kyron
+team; this repository documents the targeting architecture. Related public repo:
+[hardware_trigger](https://github.com/averyhsu/hardware_trigger) (Teensy camera trigger).*
+
+```mermaid
+flowchart LR
+    CAM["Alvium camera<br/>100 Hz, HW-triggered"] -->|frames| KLT["Jetson: KLT tracking<br/>every frame"]
+    CAM -->|"every 10th frame"| YOLO["Jetson: YOLOv8-Pose<br/>stem keypoint"]
+    YOLO -->|"pixel in frame X"| FF["Fast-forward X → Y<br/>sum measured shifts"]
+    KLT --> FF
+    FF -->|"pixel_pos, pixel_vel"| T["Teensy 4.1<br/>1 kHz aim loop"]
+    GYRO["Gyro 1 kHz"] --> T
+    T -->|"SPI DAC ±10 V"| GALVO["Galvo + laser"]
+    T -->|trigger| CAM
+```
+
+The core design principle: **the system only ever measures deltas between two
 bookmarked moments — it never needs to know where it is in the world.** No map
 frame, no odometry in the fire path, no global correctness required.
 
